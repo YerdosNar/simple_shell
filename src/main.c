@@ -32,7 +32,7 @@ char **tokenizer(char *line)
                 exit(EXIT_FAILURE);
         }
 
-        char *delim = " \n\t";
+        char *delim = " \n";
         char *token = strtok(line, delim);
         while (token != NULL) {
                 tokens[i++] = token;
@@ -55,13 +55,19 @@ char **tokenizer(char *line)
 int execute_cmd(char **cmds)
 {
         pid_t pid = fork();
+        int status;
+
         if (0 == pid) {
                 if (execvp(cmds[0], cmds) == -1) {
                         fprintf(stderr, "ERROR: execvp(%s) failed\n", cmds[0]);
-                        exit(EXIT_FAILURE);
                 }
-        } else if (0 > pid) {
-                wait(NULL);
+                exit(EXIT_FAILURE);
+        } else if (0 < pid) {
+                do { waitpid(pid, &status, WUNTRACED);
+                } while(!WIFEXITED(status) && !WIFSIGNALED(status));
+        } else {
+                fprintf(stderr, "ERROR: fork() failed, pid=%d\n", pid);
+                exit(EXIT_FAILURE);
         }
 
         return 0;
