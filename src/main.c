@@ -7,13 +7,29 @@
 
 char *read_line(void)
 {
-        char *input= NULL;
-        size_t bufsize = 0;
-
-        if (getline(&input, &bufsize, stdin) == -1) {
-                fprintf(stderr, "ERROR: getline() failed\n");
+        int input_len = 128;
+        char *input = malloc(input_len);
+        if (!input) {
+                fprintf(stderr, "ERROR: malloc(%d) failed\n",
+                                input_len);
                 exit(EXIT_FAILURE);
         }
+
+        int c, i = 0;
+        while ((c = getchar()) != '\n') {
+                if (i >= input_len) {
+                        input_len += input_len / 2;
+                        input = realloc(input, input_len);
+                        if (!input) {
+                                fprintf(stderr,
+                                        "ERROR: realoc(%d) failed\n",
+                                        input_len);
+                                exit(EXIT_FAILURE);
+                        }
+                }
+                input[i++] = c;
+        }
+        input[i] = '\0';
 
         return input;
 }
