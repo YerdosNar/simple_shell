@@ -1,71 +1,60 @@
+#include "../include/input.h"
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-char *read_line(void)
+void handler(int sig)
 {
-        int input_len = 128;
-        char *input = malloc(input_len);
-        if (!input) {
-                fprintf(stderr, "ERROR: malloc(%d) failed\n",
-                                input_len);
-                exit(EXIT_FAILURE);
-        }
-
-        int c, i = 0;
-        while ((c = getchar()) != '\n') {
-                if (i >= input_len) {
-                        input_len += input_len / 2;
-                        input = realloc(input, input_len);
-                        if (!input) {
-                                fprintf(stderr,
-                                        "ERROR: realoc(%d) failed\n",
-                                        input_len);
-                                exit(EXIT_FAILURE);
-                        }
-                }
-                input[i++] = c;
-        }
-        input[i] = '\0';
-
-        return input;
+        printf("\rCaught signal %d\n", sig);
+        printf("Exiting...\n");
+        exit(sig);
 }
 
-char **tokenizer(char *line)
+int execute_pipe(char **cmd1, char **cmd2)
 {
-        if (!line) {
-                fprintf(stderr, "ERROR: Tokenizer received NULL\n");
+        int fd[2];
+        if (pipe(fd) == -1) {
+                fprintf(stderr, "ERROR: pipe() failed\n");
                 exit(EXIT_FAILURE);
         }
 
-        int token_num = 64, i = 0;
-        char **tokens= malloc(token_num * sizeof(char*));
-        if (!tokens) {
-                fprintf(stderr, "ERROR: malloc(tokens) failed\n");
-                exit(EXIT_FAILURE);
-        }
-
-        char *delim = " \n";
-        char *token = strtok(line, delim);
-        while (token != NULL) {
-                tokens[i++] = token;
-
-                if (i >= token_num) {
-                        token_num += (token_num / 2);
-                        tokens = realloc(tokens, token_num * sizeof(char*));
-                        if (!tokens) {
-                                fprintf(stderr, "ERROR: realloc(tokens, %d) failed\n",
-                                                token_num);
-                                exit(EXIT_FAILURE);
-                        }
+        pid_t pid1 = fork();
+        if (pid1 == 0) {
+                if (dup2(fd[1], STDOUT_FILENO) == -1) {
+                        fprintf(stderr, "ERROR: dup2(fd[1]) failed\n");
+                        exit(EXIT_FAILURE);
                 }
-                token = strtok(NULL, delim);
+                close(fd[0]);
+                close(fd[1]);
+                execvp(cmd1[0], cmd1);
+                fprintf(stderr, "ERROR: execvp(%s) failed\n", cmd1[0]);
+                exit(EXIT_FAILURE);
         }
 
-        return tokens;
+        pid_t pid2 = fork();
+        if (pid2 == 0) {
+                if (dup2(fd[0], STDIN_FILENO) == -1) {
+                        fprintf(stderr, "ERROR: dup2(fd[0]) failed\n");
+                        exit(EXIT_FAILURE);
+                }
+                close(fd[0]);
+                close(fd[1]);
+                execvp(cmd2[0], cmd2);
+                fprintf(stderr, "ERROR: execvp(%s) failed\n", cmd2[0]);
+                exit(EXIT_FAILURE);
+        }
+
+        close(fd[0]);
+        close(fd[1]);
+
+        waitpid(pid1, NULL, 0);
+        waitpid(pid2, NULL, 0);
+
+        return 0;
 }
 
 int execute_cmd(char **cmds)
@@ -93,16 +82,29 @@ int run()
 {
         while (1) {
                 printf("> ");
-                char *input = read_line();
-                char **cmds = tokenizer(input);
-                int return_val = execute_cmd(cmds);
-                if (return_val) {
-                        fprintf(stderr, "ERROR: Return value is not 0\n");
-                        exit(EXIT_FAILURE);
+                int pipe_exists = 0;
+                char *input = input_read_line(&pipe_exists);
+                if (pipe_exists) {
+                        char **halves = input_tokenizer(input, "|");
+                        printf("cmd1: %s\n", halves[0]);
+                        printf("cmd2: %s\n", halves[1]);
+                        char **cmd1 = input_tokenizer(halves[0], " \n");
+                        char **cmd2 = input_tokenizer(halves[1], " \n");
+                        execute_pipe(cmd1, cmd2);
+                        free(cmd1);
+                        free(cmd2);
+                        free(halves);
+                } else {
+                        char **cmds = input_tokenizer(input, " \n");
+                        int return_val = execute_cmd(cmds);
+                        if (return_val) {
+                                fprintf(stderr, "ERROR: Return value is not 0\n");
+                                exit(EXIT_FAILURE);
+                        }
+                        free(cmds);
                 }
 
                 free(input);
-                free(cmds);
         }
 
         return 0;
@@ -110,6 +112,7 @@ int run()
 
 int main(void)
 {
+        signal(SIGINT, handler);
         run();
 
         return 0;
