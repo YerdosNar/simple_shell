@@ -14,6 +14,74 @@ void handler(int sig)
         exit(sig);
 }
 
+int execute_pipeline(char ***cmds, int num_cmds)
+{
+        pid_t *pids = malloc(num_cmds * sizeof(pid_t));
+        if (!pids) {
+                fprintf(stderr, "ERROR: malloc(pids) failed\n");
+                exit(EXIT_FAILURE);
+        }
+
+        int prev_fd = STDIN_FILENO;
+
+        for (int i = 0; i < num_cmds; i++) {
+                int new_fds[2];
+                int is_last = (i == num_cmds - 1);
+
+                if (!is_last) {
+                        if (pipe(new_fds) == -1) {
+                                fprintf(stderr, "ERROR: pipe(%d) failed\n", i);
+                                exit(EXIT_FAILURE);
+                        }
+                }
+
+                pid_t pid = fork();
+                if (pid == -1) {
+                        fprintf(stderr, "ERROR: fork(%d) failed\n", i);
+                        exit(EXIT_FAILURE);
+                }
+                if (pid == 0) {
+                        if (prev_fd != STDIN_FILENO) {
+                                if (dup2(prev_fd, STDIN_FILENO) == -1) {
+                                        fprintf(stderr, "ERROR: dup2(%d) failed\n",
+                                                        i);
+                                        exit(EXIT_FAILURE);
+                                }
+                                close(prev_fd);
+                        }
+                        if (!is_last) {
+                                if (dup2(new_fds[1], STDOUT_FILENO) == -1) {
+                                        fprintf(stderr, "ERROR: dup2(%d) failed\n",
+                                                        i);
+                                        exit(EXIT_FAILURE);
+                                }
+                                close(new_fds[0]);
+                                close(new_fds[1]);
+                        }
+                        execvp(cmds[i][0], cmds[i]);
+                        fprintf(stderr, "ERROR: execvp(%s) failed\n",
+                                        cmds[i][0]);
+                        exit(EXIT_FAILURE);
+                }
+
+                pids[i] = pid;
+
+                if (prev_fd != STDIN_FILENO)
+                        close(prev_fd);
+
+                if(!is_last) {
+                        close(new_fds[1]);
+                        prev_fd = new_fds[0];
+                }
+        }
+
+        for (int i = 0; i < num_cmds; i++)
+                waitpid(pids[i], NULL, 0);
+
+        free(pids);
+        return 0;
+}
+
 int execute_pipe(char **cmd1, char **cmd2)
 {
         int fd[2];
@@ -57,54 +125,23 @@ int execute_pipe(char **cmd1, char **cmd2)
         return 0;
 }
 
-int execute_cmd(char **cmds)
-{
-        pid_t pid = fork();
-        int status;
-
-        if (0 == pid) {
-                if (execvp(cmds[0], cmds) == -1) {
-                        fprintf(stderr, "ERROR: execvp(%s) failed\n", cmds[0]);
-                }
-                exit(EXIT_FAILURE);
-        } else if (0 < pid) {
-                do { waitpid(pid, &status, WUNTRACED);
-                } while(!WIFEXITED(status) && !WIFSIGNALED(status));
-        } else {
-                fprintf(stderr, "ERROR: fork() failed, pid=%d\n", pid);
-                exit(EXIT_FAILURE);
-        }
-
-        return 0;
-}
-
 int run()
 {
         while (1) {
                 printf("> ");
-                int pipe_exists = 0;
-                char *input = input_read_line(&pipe_exists);
-                if (pipe_exists) {
-                        char **halves = input_tokenizer(input, "|");
-                        printf("cmd1: %s\n", halves[0]);
-                        printf("cmd2: %s\n", halves[1]);
-                        char **cmd1 = input_tokenizer(halves[0], " \n");
-                        char **cmd2 = input_tokenizer(halves[1], " \n");
-                        execute_pipe(cmd1, cmd2);
-                        free(cmd1);
-                        free(cmd2);
-                        free(halves);
-                } else {
-                        char **cmds = input_tokenizer(input, " \n");
-                        int return_val = execute_cmd(cmds);
-                        if (return_val) {
-                                fprintf(stderr, "ERROR: Return value is not 0\n");
-                                exit(EXIT_FAILURE);
-                        }
-                        free(cmds);
-                }
+                int pipe_count = 0;
+                int num_cmds  = 0;
+                char *input = input_read_line(&pipe_count);
+                char **chunks = input_tokenizer(input, "|", &num_cmds);
+                char ***cmds = malloc(num_cmds * sizeof(char**));
+                for (int i = 0; i < num_cmds; i++)
+                        cmds[i] = input_tokenizer(chunks[i], " \n", NULL);
+
+                execute_pipeline(cmds, num_cmds);
 
                 free(input);
+                free(chunks);
+                free(cmds);
         }
 
         return 0;

@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-char *input_read_line(int *pipe_exists)
+char *input_read_line(int *pipe_count)
 {
         int input_len = 128;
         char *input = malloc(input_len);
@@ -15,7 +15,7 @@ char *input_read_line(int *pipe_exists)
 
         int c, i = 0;
         while ((c = getchar()) != '\n' && c != EOF) {
-                if (i >= input_len) {
+                if (i + 1 >= input_len) {
                         input_len += input_len / 2;
                         input = realloc(input, input_len);
                         if (!input) {
@@ -25,7 +25,8 @@ char *input_read_line(int *pipe_exists)
                                 exit(EXIT_FAILURE);
                         }
                 }
-                if (c == '|') *pipe_exists = 1;
+                if (c == '|') *pipe_count += 1;
+
                 input[i++] = c;
         }
         if (c == EOF && i == 0) {
@@ -37,7 +38,7 @@ char *input_read_line(int *pipe_exists)
         return input;
 }
 
-char **input_tokenizer(char *line, char *delim)
+char **input_tokenizer(char *line, char *delim, int *length)
 {
         if (!line) {
                 fprintf(stderr, "ERROR: Tokenizer received NULL\n");
@@ -67,26 +68,7 @@ char **input_tokenizer(char *line, char *delim)
                 token = strtok(NULL, delim);
         }
         tokens[i] = NULL;
+        if (length) *length = i;
 
         return tokens;
-}
-
-int input_pipe_idx(char *line)
-{
-        if (!line) {
-                fprintf(stderr, "ERROR: pipe_idx(NULL)\n");
-                exit(EXIT_FAILURE);
-        }
-
-        int idx = -1;
-        while (line[++idx] != '\0') {
-                if (line[idx] == '|') break;
-        }
-
-        if (idx == 0) {
-                fprintf(stderr, "ERROR: pipe cannot be first\n");
-                exit(EXIT_FAILURE);
-        }
-
-        return idx;
 }
