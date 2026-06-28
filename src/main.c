@@ -82,56 +82,16 @@ int execute_pipeline(char ***cmds, int num_cmds)
         return 0;
 }
 
-int execute_pipe(char **cmd1, char **cmd2)
-{
-        int fd[2];
-        if (pipe(fd) == -1) {
-                fprintf(stderr, "ERROR: pipe() failed\n");
-                exit(EXIT_FAILURE);
-        }
-
-        pid_t pid1 = fork();
-        if (pid1 == 0) {
-                if (dup2(fd[1], STDOUT_FILENO) == -1) {
-                        fprintf(stderr, "ERROR: dup2(fd[1]) failed\n");
-                        exit(EXIT_FAILURE);
-                }
-                close(fd[0]);
-                close(fd[1]);
-                execvp(cmd1[0], cmd1);
-                fprintf(stderr, "ERROR: execvp(%s) failed\n", cmd1[0]);
-                exit(EXIT_FAILURE);
-        }
-
-        pid_t pid2 = fork();
-        if (pid2 == 0) {
-                if (dup2(fd[0], STDIN_FILENO) == -1) {
-                        fprintf(stderr, "ERROR: dup2(fd[0]) failed\n");
-                        exit(EXIT_FAILURE);
-                }
-                close(fd[0]);
-                close(fd[1]);
-                execvp(cmd2[0], cmd2);
-                fprintf(stderr, "ERROR: execvp(%s) failed\n", cmd2[0]);
-                exit(EXIT_FAILURE);
-        }
-
-        close(fd[0]);
-        close(fd[1]);
-
-        waitpid(pid1, NULL, 0);
-        waitpid(pid2, NULL, 0);
-
-        return 0;
-}
-
 int run()
 {
         while (1) {
                 printf("> ");
-                int pipe_count = 0;
                 int num_cmds  = 0;
-                char *input = input_read_line(&pipe_count);
+                char *input = input_read_line();
+                if (!input) {
+                        printf("\n");
+                        break;
+                }
                 char **chunks = input_tokenizer(input, "|", &num_cmds);
                 char ***cmds = malloc(num_cmds * sizeof(char**));
                 for (int i = 0; i < num_cmds; i++)
@@ -139,9 +99,9 @@ int run()
 
                 execute_pipeline(cmds, num_cmds);
 
-                free(input);
-                free(chunks);
                 free(cmds);
+                free(chunks);
+                free(input);
         }
 
         return 0;

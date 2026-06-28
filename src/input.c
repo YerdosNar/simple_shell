@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-char *input_read_line(int *pipe_count)
+char *input_read_line()
 {
         int input_len = 128;
         char *input = malloc(input_len);
@@ -25,7 +25,6 @@ char *input_read_line(int *pipe_count)
                                 exit(EXIT_FAILURE);
                         }
                 }
-                if (c == '|') *pipe_count += 1;
 
                 input[i++] = c;
         }

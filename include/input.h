@@ -3,12 +3,11 @@
 
 /*
  * Allocates space for a string, and writes user input there. Caller must free.
- * 'pipe_count' counts how many pipes there are in the input.
  *
  * On success: returns pointer to the string on heap, caller must free
  * On failure: exits with EXIT_FAILURE
  */
-char *input_read_line(int *pipe_count);
+char *input_read_line();
 
 /*
  * Takes argument 'line', and tokenizes with 'delim'. Caller must free.
