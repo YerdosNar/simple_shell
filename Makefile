@@ -1,14 +1,16 @@
-CFLAGS = -Wall -Wextra -Wpedantic -O2 -g
+CC	:= gcc
+CFLAGS  := -Wall -Wextra -Wpedantic -O2 -g
+SRC 	:= src/main.c src/input.c
+OBJ 	:= $(SRC:.c=.o)
+TARGET  := shell
 
-shell: main.o input.o
-	gcc main.o input.o -o shell
+$(TARGET): $(OBJ)
+	$(CC) $(CFLAGS) $(OBJ) -o $(TARGET)
 
-main.o: src/main.c include/input.h
-	gcc -c src/main.c -o main.o
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
-input.o: src/input.c include/input.h
-	gcc -c src/input.c -o input.o
+clean:
+	rm -f shell src/*.o
 
 .PHONY: clean
-clean:
-	rm -f shell *.o
